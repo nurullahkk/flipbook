@@ -489,31 +489,6 @@
                     }
                 }
             }
-            
-            // GÜNCELLENDİ: Bu fonksiyon artık Google API'sini doğrudan çağırmıyor.
-            async function getGeminiResponse(userQuery) {
-                // Kendi sunucumuzdaki API endpoint'ine istek atıyoruz.
-                const backendApiUrl = '/api/chat';
-
-                const payload = {
-                    query: userQuery,
-                    context: fullPdfTextContext
-                };
-
-                const response = await fetch(backendApiUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-
-                if (!response.ok) {
-                    const errorData = await response.json();
-                    throw new Error(errorData.error || `Sunucu hatası: ${response.status}`);
-                }
-
-                const data = await response.json();
-                return data.text; // Sunucumuzdan gelen cevabı döndürüyoruz.
-            }
 
             async function handleChatMessage() {
                 const query = chatbotInput.value.trim();
@@ -530,7 +505,6 @@
                 } catch (error) {
                     console.error("Sunucu Hatası:", error);
                     loadingMessage.remove();
-                    // Kullanıcıya daha anlaşılır bir hata mesajı gösterelim.
                     const friendlyMessage = `Bir sunucu hatası oluştu. Lütfen Vercel projenizdeki "Environment Variables" ayarlarını ve API anahtarınızın doğruluğunu kontrol edin. Sunucudan gelen mesaj: ${error.message}`;
                     addChatMessage(friendlyMessage, 'bot', 'error');
                 }
@@ -551,31 +525,22 @@
                 });
 
                 if (!response.ok) {
-                    // Sunucudan bir hata geldiğinde, yanıtı önce metin olarak okuyalım.
-                    // Bu, JSON olmayan hata mesajlarını (HTML sayfaları gibi) yakalamamızı sağlar.
                     const errorText = await response.text();
                     let errorMessage = errorText;
-
-                    // Gelen metni JSON olarak ayrıştırmayı deneyelim. Başarılı olursa,
-                    // içindeki spesifik hata mesajını kullanırız.
                     try {
                         const errorJson = JSON.parse(errorText);
                         if (errorJson && errorJson.error) {
                             errorMessage = errorJson.error;
                         }
                     } catch (e) {
-                        // Yanıt JSON değilse, ham metni hata olarak kullanmaya devam ederiz.
-                        // "Unexpected token 'A'..." hatasını bu blok önler.
                         console.error("Sunucudan gelen yanıt JSON formatında değil:", errorText);
                     }
-                    
                     throw new Error(errorMessage);
                 }
 
                 const data = await response.json();
                 return data.text;
             }
-
 
             function addChatMessage(message, sender, type = '') {
                 const messageElement = document.createElement('div');
