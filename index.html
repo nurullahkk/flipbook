@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gemini Destekli Güvenli PDF Görüntüleyici</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary-bg: #1a1d24;
+            --secondary-bg: #252934;
+            --accent-color: #4e80ff; /* Gemini-like blue */
+            --text-color: #f0f0f0;
+            --shadow-color: rgba(0, 0, 0, 0.5);
+        }
+
+        html, body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            height: 100%;
+            background-color: var(--primary-bg);
+            font-family: 'Poppins', sans-serif;
+            color: var(--text-color);
+        }
+
+        #app-container {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            transition: background-color 0.5s;
+        }
+
+        /* --- Yükleme Alanı --- */
+        #upload-area {
+            text-align: center;
+            padding: 40px;
+            border-radius: 15px;
+            background-color: var(--secondary-bg);
+            box-shadow: 0 10px 30px var(--shadow-color);
+        }
+
+        #upload-area h1 {
+            margin-top: 0;
+            font-weight: 600;
+        }
+
+        #upload-area p {
+            font-weight: 300;
+            margin-bottom: 30px;
+        }
+
+        .upload-btn {
+            background-color: var(--accent-color);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 50px;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .upload-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 5px 20px rgba(78, 128, 255, 0.4);
+        }
+
+        /* --- Görüntüleyici Alanı --- */
+        #viewer-area {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .flip-book {
+            box-shadow: 0 15px 40px var(--shadow-color);
+        }
+
+        .page canvas {
+            width: 100%;
+            height: 100%;
+        }
+
+        /* --- Navigasyon --- */
+        #bottom-bar {
+            position: fixed;
+            bottom: 25px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            background: rgba(20, 20, 20, 0.6);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            padding: 10px 20px;
+            border-radius: 50px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        }
+
+        .nav-btn {
+            background: none;
+            border: none;
+            color: var(--text-color);
+            font-size: 1.3em;
+            cursor: pointer;
+            padding: 8px 12px;
+            margin: 0 5px;
+            border-radius: 50%;
+            transition: background-color 0.2s, color 0.2s;
+        }
+
+        .nav-btn:hover:not(:disabled) {
+            background-color: rgba(255, 255, 255, 0.1);
+            color: var(--accent-color);
+        }
+
+        .nav-btn:disabled {
+            color: #666;
+            cursor: not-allowed;
+        }
+
+        /* --- Yükleyici (Spinner) --- */
+        #loader {
+            border: 5px solid #f3f3f340;
+            border-top: 5px solid var(--accent-color);
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .hidden {
+            display: none !important;
+        }
+
+        /* --- Sohbet Botu --- */
+        #chatbot-container {
+            position: fixed;
+            top: 0;
+            right: -400px;
+            width: 380px;
+            height: 100%;
+            background-color: var(--secondary-bg);
+            z-index: 200;
+            display: flex;
+            flex-direction: column;
+            box-shadow: -5px 0 25px rgba(0,0,0,0.4);
+            transition: right 0.4s ease-in-out;
+        }
+
+        #chatbot-container.open {
+            right: 0;
+        }
+
+        .chatbot-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 20px;
+            background-color: #1f222b;
+        }
+
+        .chatbot-header h3 {
+            margin: 0;
+            font-weight: 600;
+        }
+
+        #chatbot-close-btn {
+            background: none;
+            border: none;
+            color: var(--text-color);
+            font-size: 2em;
+            cursor: pointer;
+            line-height: 0.5;
+        }
+
+        #chatbot-messages {
+            flex-grow: 1;
+            padding: 20px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .chatbot-message {
+            padding: 10px 15px;
+            border-radius: 15px;
+            max-width: 90%;
+            line-height: 1.5;
+            white-space: pre-wrap;
+        }
+
+        .user-message {
+            background-color: var(--accent-color);
+            color: white;
+            align-self: flex-end;
+            border-bottom-right-radius: 3px;
+        }
+
+        .bot-message {
+            background-color: #323644;
+            align-self: flex-start;
+            border-bottom-left-radius: 3px;
+        }
+        
+        .bot-message.loading-message {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .typing-indicator {
+            height: 8px;
+            width: 8px;
+            background-color: var(--accent-color);
+            border-radius: 50%;
+            display: inline-block;
+            animation: typing 1s infinite ease-in-out;
+        }
+        .typing-indicator:nth-child(2) { animation-delay: 0.2s; }
+        .typing-indicator:nth-child(3) { animation-delay: 0.4s; }
+
+        @keyframes typing {
+            0%, 80%, 100% { transform: scale(0); }
+            40% { transform: scale(1.0); }
+        }
+
+
+        .bot-message.error-message {
+            background-color: #682a2a;
+            color: #f5c5c5;
+        }
+
+        .bot-message a {
+            color: var(--accent-color);
+            text-decoration: underline;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .chatbot-input-area {
+            display: flex;
+            padding: 15px;
+            border-top: 1px solid #1f222b;
+        }
+
+        #chatbot-input {
+            flex-grow: 1;
+            background-color: #1f222b;
+            border: 1px solid transparent;
+            border-radius: 20px;
+            padding: 10px 15px;
+            color: var(--text-color);
+            font-family: 'Poppins', sans-serif;
+            font-size: 1em;
+        }
+
+        #chatbot-input:focus {
+            outline: none;
+            border-color: var(--accent-color);
+        }
+
+        #chatbot-send-btn {
+            background: none;
+            border: none;
+            color: var(--accent-color);
+            font-size: 1.5em;
+            cursor: pointer;
+            margin-left: 10px;
+        }
+    </style>
+</head>
+<body>
+
+    <input type="file" id="pdf-file" accept=".pdf" hidden>
+
+    <div id="app-container">
+        <div id="upload-area">
+            <h1>Gemini PDF Görüntüleyici</h1>
+            <p>İnteraktif olarak görüntülemek ve sohbet etmek için bir PDF dosyası seçin.</p>
+            <button id="upload-button" class="upload-btn">
+                <i class="fas fa-file-pdf"></i> PDF Yükle
+            </button>
+        </div>
+        <div id="viewer-area" class="hidden">
+            <div class="flip-book" id="book"></div>
+        </div>
+        <div id="loader" class="hidden"></div>
+    </div>
+
+    <div id="bottom-bar" class="hidden">
+        <button id="btn-fullscreen" class="nav-btn" title="Tam Ekran"><i class="fas fa-expand"></i></button>
+        <button id="btn-first" class="nav-btn" title="İlk Sayfa"><i class="fas fa-fast-backward"></i></button>
+        <button id="btn-prev" class="nav-btn" title="Önceki Sayfa (Sol Ok)"><i class="fas fa-step-backward"></i></button>
+        <button id="btn-next" class="nav-btn" title="Sonraki Sayfa (Sağ Ok)"><i class="fas fa-step-forward"></i></button>
+        <button id="btn-last" class="nav-btn" title="Son Sayfa"><i class="fas fa-fast-forward"></i></button>
+        <button id="btn-download" class="nav-btn" title="Paket Olarak İndir" style="margin-left: 15px;"><i class="fas fa-download"></i></button>
+        <button id="btn-chat" class="nav-btn" title="Belgeyle Sohbet Et"><i class="fas fa-comments"></i></button>
+    </div>
+
+    <div id="chatbot-container">
+        <div class="chatbot-header">
+            <h3>Gemini Belge Asistanı</h3>
+            <button id="chatbot-close-btn">&times;</button>
+        </div>
+        <div id="chatbot-messages"></div>
+        <div class="chatbot-input-area">
+            <input type="text" id="chatbot-input" placeholder="Belge hakkında bir soru sorun...">
+            <button id="chatbot-send-btn"><i class="fas fa-paper-plane"></i></button>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.10.377/pdf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/page-flip/dist/js/page-flip.browser.min.js"></script>
+
+    <script id="main-script">
+        document.addEventListener('DOMContentLoaded', () => {
+            pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.10.377/pdf.worker.min.js`;
+
+            // --- DOM Elements
+            const getEl = (id) => document.getElementById(id);
+            const appContainer = getEl('app-container');
+            const uploadArea = getEl('upload-area');
+            const viewerArea = getEl('viewer-area');
+            const loader = getEl('loader');
+            const uploadButton = getEl('upload-button');
+            const fileInput = getEl('pdf-file');
+            const bookContainer = getEl('book');
+            const bottomBar = getEl('bottom-bar');
+            const btnFirst = getEl('btn-first');
+            const btnPrev = getEl('btn-prev');
+            const btnNext = getEl('btn-next');
+            const btnLast = getEl('btn-last');
+            const btnDownload = getEl('btn-download');
+            const btnFullscreen = getEl('btn-fullscreen');
+            const btnChat = getEl('btn-chat');
+            const chatbotContainer = getEl('chatbot-container');
+            const chatbotCloseBtn = getEl('chatbot-close-btn');
+            const chatbotMessages = getEl('chatbot-messages');
+            const chatbotInput = getEl('chatbot-input');
+            const chatbotSendBtn = getEl('chatbot-send-btn');
+            
+            // --- Application State
+            let pageFlip = null;
+            let totalPages = 0;
+            let currentPdfFile = null;
+            let fullPdfTextContext = '';
+            
+            // --- Functions
+
+            const updateControls = () => {
+                if (!pageFlip) return;
+
+                const currentViewIndex = pageFlip.getCurrentPageIndex();
+                const totalViews = pageFlip.getPageCount();
+                
+                btnFirst.disabled = (currentViewIndex === 0);
+                btnPrev.disabled = (currentViewIndex === 0);
+                btnNext.disabled = (currentViewIndex >= totalViews - 1);
+                btnLast.disabled = (currentViewIndex >= totalViews - 1);
+            };
+
+            async function loadPdf(pdfSource) {
+                if(uploadArea) uploadArea.classList.add('hidden');
+                loader.classList.remove('hidden');
+                bottomBar.classList.add('hidden');
+                fullPdfTextContext = '';
+                chatbotMessages.innerHTML = '';
+
+                if (pageFlip) {
+                    pageFlip.off('flip', updateControls);
+                    pageFlip.destroy();
+                    pageFlip = null;
+                }
+                bookContainer.innerHTML = '';
+
+                try {
+                    const pdf = await pdfjsLib.getDocument(pdfSource).promise;
+                    totalPages = pdf.numPages;
+                    
+                    const pageRatio = 210 / 297;
+                    const containerW = appContainer.clientWidth * 0.9;
+                    const containerH = appContainer.clientHeight * 0.9;
+                    const bookRatio = pageRatio * 2;
+                    
+                    let bookW, bookH;
+                    if (containerW / containerH > bookRatio) {
+                        bookH = containerH;
+                        bookW = bookH * bookRatio;
+                    } else {
+                        bookW = containerW;
+                        bookH = bookW / bookRatio;
+                    }
+                    
+                    bookContainer.style.width = `${bookW}px`;
+                    bookContainer.style.height = `${bookH}px`;
+
+                    pageFlip = new St.PageFlip(bookContainer, {
+                        width: bookW / 2, height: bookH, showCover: true,
+                        flippingTime: 600, maxShadowOpacity: 0.2, startZ: 5,
+                    });
+
+                    const pagesHtml = [];
+                    for (let i = 1; i <= totalPages; i++) {
+                        const page = await pdf.getPage(i);
+                        const viewport = page.getViewport({ scale: 2.0 });
+                        const canvas = document.createElement('canvas');
+                        canvas.width = viewport.width;
+                        canvas.height = viewport.height;
+                        const context = canvas.getContext('2d');
+                        await page.render({ canvasContext: context, viewport: viewport }).promise;
+                        
+                        const pageElement = document.createElement('div');
+                        pageElement.appendChild(canvas);
+                        pagesHtml.push(pageElement);
+
+                        const textContent = await page.getTextContent();
+                        const rawText = textContent.items.map(item => item.str).join('');
+                        const normalizedText = rawText.replace(/\s+/g, ' ').trim();
+                        fullPdfTextContext += `[Sayfa ${i}]: ${normalizedText}\n\n`;
+                    }
+                    
+                    pageFlip.loadFromHTML(pagesHtml);
+                    
+                    loader.classList.add('hidden');
+                    viewerArea.classList.remove('hidden');
+                    bottomBar.classList.remove('hidden');
+
+                    pageFlip.on('flip', updateControls);
+                    updateControls();
+
+                    addChatMessage("Merhaba! Bu belge hakkında ne öğrenmek istersiniz?", 'bot');
+
+                } catch (error) {
+                    console.error('PDF Error:', error);
+                    alert(`Hata: PDF işlenemedi. Detay: ${error.message}`);
+                    loader.classList.add('hidden');
+                    if(uploadArea) uploadArea.classList.remove('hidden');
+                }
+            }
+
+            function createPackage() {
+                if (!currentPdfFile) {
+                    alert("Lütfen önce bir PDF dosyası yükleyin."); return;
+                }
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    const pdfAsDataUrl = event.target.result;
+                    let templateHtml = document.documentElement.outerHTML;
+                    const dataScript = `<script id="embedded-pdf" type="text/plain">${pdfAsDataUrl}<\/script>`;
+                    templateHtml = templateHtml.replace(/<script id="main-script">/, `${dataScript}<script id="main-script">`);
+                    templateHtml = templateHtml.replace(/<input type="file" id="pdf-file"[^>]+>/, '');
+                    templateHtml = templateHtml.replace(/<div id="chatbot-container">[\s\S]*?<\/div>/, '');
+                    const blobHtml = new Blob([templateHtml], { type: 'text/html' });
+                    const link = document.createElement('a');
+                    link.href = URL.createObjectURL(blobHtml);
+                    link.download = 'flipbook.html';
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                };
+                reader.readAsDataURL(currentPdfFile);
+            }
+
+            function toggleFullScreen() {
+                if (!document.fullscreenElement) {
+                    document.documentElement.requestFullscreen();
+                    btnFullscreen.innerHTML = `<i class="fas fa-compress"></i>`;
+                } else {
+                    if (document.exitFullscreen) {
+                        document.exitFullscreen();
+                        btnFullscreen.innerHTML = `<i class="fas fa-expand"></i>`;
+                    }
+                }
+            }
+            
+            // GÜNCELLENDİ: Bu fonksiyon artık Google API'sini doğrudan çağırmıyor.
+            async function getGeminiResponse(userQuery) {
+                // Kendi sunucumuzdaki API endpoint'ine istek atıyoruz.
+                const backendApiUrl = '/api/chat';
+
+                const payload = {
+                    query: userQuery,
+                    context: fullPdfTextContext
+                };
+
+                const response = await fetch(backendApiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || `Sunucu hatası: ${response.status}`);
+                }
+
+                const data = await response.json();
+                return data.text; // Sunucumuzdan gelen cevabı döndürüyoruz.
+            }
+
+            async function handleChatMessage() {
+                const query = chatbotInput.value.trim();
+                if (!query) return;
+
+                addChatMessage(query, 'user');
+                chatbotInput.value = '';
+                const loadingMessage = addChatMessage("...", 'bot', 'loading');
+
+                try {
+                    // GÜNCELLENDİ: Güvenli fonksiyonumuzu çağırıyoruz.
+                    const botResponse = await getGeminiResponse(query);
+                    loadingMessage.remove();
+                    addChatMessage(botResponse, 'bot');
+                } catch (error) {
+                    console.error("API Hatası:", error);
+                    loadingMessage.remove();
+                    addChatMessage(`Bir hata oluştu: ${error.message}. Sunucu tarafı loglarını kontrol edin.`, 'bot', 'error');
+                }
+            }
+
+            function addChatMessage(message, sender, type = '') {
+                const messageElement = document.createElement('div');
+                messageElement.classList.add('chatbot-message', `${sender}-message`);
+                if(type) messageElement.classList.add(`${type}-message`);
+
+                if (type === 'loading') {
+                    messageElement.innerHTML = `
+                        <div class="typing-indicator"></div>
+                        <div class="typing-indicator"></div>
+                        <div class="typing-indicator"></div>
+                    `;
+                } else {
+                    messageElement.textContent = message;
+                }
+
+                chatbotMessages.appendChild(messageElement);
+                chatbotMessages.scrollTop = chatbotMessages.scrollHeight;
+                return messageElement;
+            }
+
+            // --- Initial Logic (Mode Selection)
+            const embeddedPdfScript = document.getElementById('embedded-pdf');
+
+            if (embeddedPdfScript && embeddedPdfScript.text) {
+                // --- VIEWER MODE (Packaged File)
+                if(uploadArea) uploadArea.classList.add('hidden');
+                if(btnDownload) btnDownload.classList.add('hidden');
+                if(btnChat) btnChat.classList.add('hidden');
+                if(chatbotContainer) chatbotContainer.classList.add('hidden');
+
+                const b64toBlob = (b64Data) => {
+                    const [header, data] = b64Data.split(',');
+                    const contentType = header.match(/:(.*?);/)[1];
+                    const byteCharacters = atob(data);
+                    const byteArrays = [];
+                    for (let offset = 0; offset < byteCharacters.length; offset += 512) {
+                        const slice = byteCharacters.slice(offset, offset + 512);
+                        const byteNumbers = new Array(slice.length);
+                        for (let i = 0; i < slice.length; i++) {
+                            byteNumbers[i] = slice.charCodeAt(i);
+                        }
+                        byteArrays.push(new Uint8Array(byteNumbers));
+                    }
+                    return new Blob(byteArrays, {type: contentType});
+                }
+
+                const blob = b64toBlob(embeddedPdfScript.text);
+                const fileUrl = URL.createObjectURL(blob);
+                loadPdf(fileUrl);
+
+            } else {
+                // --- CREATOR MODE (Original File)
+                uploadButton.addEventListener('click', () => fileInput.click());
+                fileInput.addEventListener('change', (e) => {
+                    const file = e.target.files[0];
+                    if (file && file.type === 'application/pdf') {
+                        currentPdfFile = file;
+                        const fileReader = new FileReader();
+                        fileReader.onload = (event) => {
+                            loadPdf({ data: event.target.result });
+                        };
+                        fileReader.readAsArrayBuffer(file);
+                    }
+                });
+                btnDownload.addEventListener('click', createPackage);
+                btnChat.addEventListener('click', () => chatbotContainer.classList.add('open'));
+                chatbotCloseBtn.addEventListener('click', () => chatbotContainer.classList.remove('open'));
+                chatbotSendBtn.addEventListener('click', handleChatMessage);
+                chatbotInput.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        handleChatMessage();
+                    }
+                });
+            }
+
+            // --- Common Event Listeners
+            document.addEventListener('keydown', (e) => {
+                if (!pageFlip || document.activeElement === chatbotInput) return;
+                if (e.key === 'ArrowLeft') pageFlip.flipPrev();
+                if (e.key === 'ArrowRight') pageFlip.flipNext();
+            });
+
+            chatbotMessages.addEventListener('click', (e) => {
+                if (e.target.tagName === 'A' && e.target.dataset.page) {
+                    e.preventDefault();
+                    const targetPage = parseInt(e.target.dataset.page, 10);
+                    const viewIndex = (targetPage <= 1) ? 0 : Math.ceil((targetPage - 1) / 2);
+                    if (viewIndex < pageFlip.getPageCount()) {
+                        pageFlip.flip(viewIndex);
+                    }
+                }
+            });
+
+            btnFirst.addEventListener('click', () => pageFlip && pageFlip.flip(0));
+            btnPrev.addEventListener('click', () => pageFlip && pageFlip.flipPrev());
+            btnNext.addEventListener('click', () => pageFlip && pageFlip.flipNext());
+            btnLast.addEventListener('click', () => pageFlip && pageFlip.flip(pageFlip.getPageCount() - 1));
+            btnFullscreen.addEventListener('click', toggleFullScreen);
+        });
+    </script>
+
+</body>
+</html>
